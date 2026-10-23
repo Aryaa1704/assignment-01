@@ -1,10 +1,6 @@
-import { documentCodes } from '@/data/e-sanchit-codes'
-import { quantityCodes } from '@/data/quantity-code'
-import schemeCodes from '@/data/scheme-codes'
-import { stateOptions } from '@/data/states'
-import { Trades } from '@/data/trade-agrements'
-import { cargoOptions, contractTypes, paymentTypes, priceInclusionTypes, sealTypes, weightUnits } from '@/data/types'
 import { BranchDialog, PartyDialog } from './party-dialogs'
+import { useFormOptions } from './hooks/use-form-options'
+import { referenceService } from './services/reference.service'
 import { routes } from '@/shared/route-paths'
 import { s, useFieldArray, useForm } from 'core/form'
 import { Form, SubmitButton } from 'core/form/components'
@@ -117,9 +113,6 @@ interface QuickBranch {
   branchName: BranchPath
 }
 
-const portOptions = ports.map((port) => ({ value: port.code, label: `${port.name} · ${port.code}` }))
-
-const currencyOptions = ['USD', 'EUR', 'INR', 'AED', 'GBP', 'SGD'].map((value) => ({ value, label: value }))
 const dateType = 'date' as 'text'
 
 function SectionHeading({ title, description }: { title: string; description?: string }) {
@@ -517,6 +510,7 @@ function InvoiceEditor({
     append: addItem,
     remove: removeItem
   } = useFieldArray({ control, name: `invoices.${index}.items` })
+  const { currencyOptions, contractTypes, priceInclusionTypes, paymentTypes, schemeCodes, quantityCodes, trades: Trades } = useFormOptions()
   const buyerSame = formCtx.hooks.watch(`invoices.${index}.buyerSameAsConsignee`)
   const buyerOptions = businesses.filter((business) => business.isBuyer || business.id === Number(invoice.buyerId))
   const thirdPartyOptions = businesses.filter(
@@ -998,6 +992,7 @@ function InvoiceEditor({
 function DocumentItem({ formCtx, index, onRemove }: { formCtx: BillFormContext; index: number; onRemove: () => void }) {
   const { register, watch } = formCtx.hooks
   const documentValues = watch(`documents.${index}`)
+  // documentCodes are fetched async via referenceService directly in the AsyncPartySelect callbacks below
 
   const hasCustomValues = Boolean(
     documentValues?.placeOfIssue ||
@@ -1036,17 +1031,12 @@ function DocumentItem({ formCtx, index, onRemove }: { formCtx: BillFormContext; 
             name={`documents.${index}.documentTypeCode`}
             placeholder="Search document type..."
             fetchOptions={async (query) => {
-              const q = query.toLowerCase().trim()
-              const filtered = documentCodes.filter(
-                (doc) => doc.label.toLowerCase().includes(q) || doc.value.toLowerCase().includes(q)
-              )
-              return filtered.map((doc) => ({
-                value: doc.value,
-                label: doc.label
-              }))
+              const results = await referenceService.fetchDocumentCodes(query)
+              return results.map((doc) => ({ value: String(doc.value), label: doc.label }))
             }}
             getInitialLabel={async (val) => {
-              const found = documentCodes.find((doc) => doc.value === val || doc.label === val)
+              const results = await referenceService.fetchDocumentCodes(val)
+              const found = results.find((doc) => String(doc.value) === val || doc.label === val)
               return found ? found.label : val
             }}
           />
@@ -1127,6 +1117,7 @@ function DocumentItem({ formCtx, index, onRemove }: { formCtx: BillFormContext; 
 
 function BillEditor({ bill }: { bill?: SavedBill }) {
   const { exporters, businesses } = useDemoData()
+  const { dischargePorts: portOptions, stateOptions, cargoOptions, weightUnits, sealTypes } = useFormOptions()
   const formCtx = useForm<ShippingBillFormValues>(billSchema, { defaultValues: bill?.values ?? emptyBill() })
   const { register, control, setValue, formState } = formCtx.hooks
   const values = formCtx.hooks.watch()
